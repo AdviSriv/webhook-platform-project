@@ -2,18 +2,28 @@ import json
 import os
 import uuid
 from datetime import datetime, timezone
+from decimal import Decimal
 import boto3
 
-# Configuration via environment variables (Member 3 will set these in AWS)
+# Configuration via environment variables
 TABLE_NAME = os.environ.get("EVENTS_TABLE", "WebhookEvents")
 QUEUE_URL = os.environ.get("EVENT_QUEUE_URL", "")
 DEFAULT_WEBHOOK_URL = os.environ.get(
     "DEFAULT_WEBHOOK_URL", "https://httpbin.org/post"
 )
 
-# Lazy client loaders so unit tests run cleanly without AWS credentials
+# Lazy client loaders
 _dynamodb = None
 _sqs = None
+
+
+class DecimalEncoder(json.JSONEncoder):
+    """Encodes DynamoDB Decimal objects back into standard JSON numbers/ints."""
+
+    def default(self, obj):
+        if isinstance(obj, Decimal):
+            return float(obj) if obj % 1 > 0 else int(obj)
+        return super().default(obj)
 
 
 def get_dynamodb_table():
@@ -31,14 +41,14 @@ def get_sqs_client():
 
 
 def format_response(status_code: int, body: dict) -> dict:
-    """Returns standard API Gateway response."""
+    """Returns standard API Gateway response with Decimal handling."""
     return {
         "statusCode": status_code,
         "headers": {
             "Content-Type": "application/json",
             "Access-Control-Allow-Origin": "*",
         },
-        "body": json.dumps(body),
+        "body": json.dumps(body, cls=DecimalEncoder),
     }
 
 
@@ -68,8 +78,11 @@ def validate_and_build_event(body: dict) -> dict:
         raise ValueError("Payload 'quantity' must be a positive integer (> 0).")
 
     total = payload.get("total")
-    if not isinstance(total, (int, float)) or total <= 0:
+    if not isinstance(total, (int, float, Decimal)) or total <= 0:
         raise ValueError("Payload 'total' must be a positive number (> 0).")
+
+    # Convert total to Decimal for DynamoDB compatibility
+    total_decimal = Decimal(str(total)) if isinstance(total, float) else total
 
     event_id = str(uuid.uuid4())
     timestamp = datetime.now(timezone.utc).isoformat()
@@ -84,7 +97,7 @@ def validate_and_build_event(body: dict) -> dict:
             "order_id": order_id,
             "product": product,
             "quantity": quantity,
-            "total": total,
+            "total": total_decimal,
         },
     }
 
@@ -95,7 +108,7 @@ def ingest_event(body: dict) -> dict:
     table = get_dynamodb_table()
     sqs = get_sqs_client()
 
-    # 1. Store initial status as QUEUED
+    # 1. Store initial status in DynamoDB
     table.put_item(
         Item={
             "event_id": event["event_id"],
@@ -109,11 +122,11 @@ def ingest_event(body: dict) -> dict:
         }
     )
 
-    # 2. Push message to SQS queue
+    # 2. Push message to SQS queue (using DecimalEncoder so floats serialize cleanly)
     try:
         sqs.send_message(
             QueueUrl=QUEUE_URL,
-            MessageBody=json.dumps(event),
+            MessageBody=json.dumps(event, cls=DecimalEncoder),
         )
     except Exception as exc:
         table.update_item(

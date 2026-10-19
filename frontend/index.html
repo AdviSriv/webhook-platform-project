@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CloudMart - Webhook Delivery Demo</title>
+  <!-- Tailwind CSS CDN for sleek modern styling -->
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen py-10 px-4">
+  <div class="max-w-5xl mx-auto space-y-8">
+    
+    <!-- Header -->
+    <header class="border-b border-slate-800 pb-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div>
+        <h1 class="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
+          <span>🎧 CloudMart Demo Store</span>
+          <span class="text-xs bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 px-2 py-0.5 rounded-full font-mono">Member 1 UI</span>
+        </h1>
+        <p class="text-sm text-slate-400 mt-1">Simulate order events and monitor asynchronous webhook delivery status.</p>
+      </div>
+
+      <!-- API URL Input -->
+      <div class="w-full md:w-auto">
+        <label class="block text-xs font-mono text-slate-400 mb-1">API GATEWAY ENDPOINT</label>
+        <input 
+          id="apiUrl" 
+          type="text" 
+          placeholder="https://xyz.execute-api.us-east-1.amazonaws.com" 
+          class="w-full md:w-96 px-3 py-1.5 text-xs bg-slate-800 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:border-indigo-500 font-mono"
+        />
+      </div>
+    </header>
+
+    <!-- Main Content Grid -->
+    <main class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+      
+      <!-- Left Column: Shopping Product Card (5 cols) -->
+      <section class="lg:col-span-5 bg-slate-800/60 border border-slate-700/60 rounded-2xl p-6 shadow-xl flex flex-col justify-between">
+        <div class="space-y-4">
+          <div class="h-48 rounded-xl bg-gradient-to-tr from-slate-800 to-indigo-950 flex items-center justify-center border border-slate-700/50">
+            <span class="text-6xl">🎧</span>
+          </div>
+
+          <div>
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-semibold uppercase tracking-wider text-indigo-400">Audio & Electronics</span>
+              <span class="text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded">In Stock</span>
+            </div>
+            <h2 class="text-xl font-bold text-white mt-1">Sony WH-1000XM5</h2>
+            <p class="text-xs text-slate-400 mt-1">Industry-leading noise canceling wireless headphones.</p>
+          </div>
+
+          <div class="flex items-baseline gap-2 pt-2 border-t border-slate-700/50">
+            <span class="text-3xl font-extrabold text-white">$399.99</span>
+            <span class="text-xs text-slate-400">USD</span>
+          </div>
+
+          <!-- Quantity Selector -->
+          <div class="flex items-center justify-between pt-2">
+            <span class="text-xs text-slate-300 font-medium">Quantity</span>
+            <div class="flex items-center gap-3 bg-slate-900 border border-slate-700 px-3 py-1.5 rounded-lg">
+              <button onclick="updateQty(-1)" class="text-slate-400 hover:text-white font-bold px-1">−</button>
+              <span id="qtyVal" class="text-sm font-semibold font-mono w-4 text-center">1</span>
+              <button onclick="updateQty(1)" class="text-slate-400 hover:text-white font-bold px-1">+</button>
+            </div>
+          </div>
+        </div>
+
+        <button 
+          id="btnOrder" 
+          onclick="submitOrder()" 
+          class="w-full mt-6 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-3 px-4 rounded-xl transition duration-150 shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 active:scale-95"
+        >
+          <span id="btnText">Place Order Now</span>
+          <span id="btnSpinner" class="hidden animate-spin">⏳</span>
+        </button>
+      </section>
+
+      <!-- Right Column: Real-time Cloud Pipeline Monitor (7 cols) -->
+      <section class="lg:col-span-7 space-y-6">
+        
+        <!-- Live Status Card -->
+        <div class="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-6 shadow-xl space-y-4">
+          <div class="flex items-center justify-between border-b border-slate-700/50 pb-3">
+            <h3 class="text-sm font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
+              <span class="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              Live Event Delivery Status
+            </h3>
+            <span id="statusBadge" class="text-xs px-2.5 py-1 rounded-full font-mono font-semibold bg-slate-700 text-slate-300">
+              IDLE
+            </span>
+          </div>
+
+          <div class="grid grid-cols-2 gap-4 text-xs font-mono">
+            <div>
+              <span class="text-slate-500 block">EVENT ID</span>
+              <span id="displayEventId" class="text-slate-300 font-semibold truncate block">None</span>
+            </div>
+            <div>
+              <span class="text-slate-500 block">DELIVERY ATTEMPTS</span>
+              <span id="displayAttempts" class="text-slate-300 font-semibold">0</span>
+            </div>
+            <div>
+              <span class="text-slate-500 block">EVENT TYPE</span>
+              <span id="displayEventType" class="text-slate-300 font-semibold">ORDER_CREATED</span>
+            </div>
+            <div>
+              <span class="text-slate-500 block">LAST UPDATED</span>
+              <span id="displayTimestamp" class="text-slate-300 font-semibold">-</span>
+            </div>
+          </div>
+
+          <!-- Progress Bar Tracker -->
+          <div class="space-y-1.5 pt-2">
+            <div class="flex justify-between text-[11px] text-slate-400">
+              <span>Pipeline Stage</span>
+              <span id="stageLabel">Ready</span>
+            </div>
+            <div class="w-full bg-slate-700 h-1.5 rounded-full overflow-hidden">
+              <div id="progressBar" class="bg-indigo-500 h-full w-0 transition-all duration-300"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- JSON Inspector Card -->
+        <div class="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-6 shadow-xl space-y-2">
+          <div class="flex justify-between items-center">
+            <h3 class="text-xs font-mono uppercase text-slate-400">Database Record (DynamoDB)</h3>
+            <span class="text-[10px] text-slate-500 font-mono">GET /events/{event_id}</span>
+          </div>
+          <pre id="jsonViewer" class="bg-slate-950 p-4 rounded-xl text-xs text-emerald-400 font-mono overflow-x-auto max-h-56 border border-slate-800">// Click 'Place Order Now' to see the live JSON schema.</pre>
+        </div>
+
+      </section>
+    </main>
+  </div>
+
+  <script>
+    let quantity = 1;
+    let pollInterval = null;
+
+    function updateQty(change) {
+      quantity = Math.max(1, quantity + change);
+      document.getElementById('qtyVal').innerText = quantity;
+    }
+
+    function setStatusBadge(status) {
+      const badge = document.getElementById('statusBadge');
+      badge.innerText = status;
+
+      const colors = {
+        'IDLE': 'bg-slate-700 text-slate-300',
+        'QUEUED': 'bg-amber-500/20 text-amber-400 border border-amber-500/30',
+        'PROCESSING': 'bg-blue-500/20 text-blue-400 border border-blue-500/30',
+        'SUCCESS': 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30',
+        'FAILED': 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+      };
+
+      badge.className = `text-xs px-2.5 py-1 rounded-full font-mono font-semibold ${colors[status] || colors['IDLE']}`;
+    }
+
+    async function submitOrder() {
+      const apiUrl = document.getElementById('apiUrl').value.trim().replace(/\/+$/, '');
+      if (!apiUrl) {
+        alert('Please enter your API Gateway endpoint URL at the top right!');
+        return;
+      }
+
+      const btn = document.getElementById('btnOrder');
+      const btnText = document.getElementById('btnText');
+      const btnSpinner = document.getElementById('btnSpinner');
+      const progressBar = document.getElementById('progressBar');
+      const stageLabel = document.getElementById('stageLabel');
+
+      // UI Loading state
+      btnText.innerText = 'Enqueueing...';
+      btnSpinner.classList.remove('hidden');
+      btn.disabled = true;
+
+      const payload = {
+        event_type: "ORDER_CREATED",
+        payload: {
+          order_id: "ORD-" + Math.floor(1000 + Math.random() * 9000),
+          product: "Sony WH-1000XM5",
+          quantity: quantity,
+          total: parseFloat((399.99 * quantity).toFixed(2))
+        }
+      };
+
+      try {
+        const response = await fetch(`${apiUrl}/events`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await response.json();
+
+        if (response.status === 202) {
+          const eventId = data.event_id;
+          document.getElementById('displayEventId').innerText = eventId;
+          setStatusBadge('QUEUED');
+          stageLabel.innerText = 'Accepted by API Gateway & Queued to SQS';
+          progressBar.style.width = '50%';
+          document.getElementById('jsonViewer').innerText = JSON.stringify(data, null, 2);
+
+          // Start polling GET /events/{event_id}
+          startPolling(apiUrl, eventId);
+        } else {
+          alert('Error: ' + JSON.stringify(data));
+          setStatusBadge('FAILED');
+        }
+      } catch (err) {
+        alert('Fetch failed. Check CORS or API Gateway URL.\n' + err);
+      } finally {
+        btnText.innerText = 'Place Order Now';
+        btnSpinner.classList.add('hidden');
+        btn.disabled = false;
+      }
+    }
+
+    function startPolling(apiUrl, eventId) {
+      if (pollInterval) clearInterval(pollInterval);
+
+      let attemptsCount = 0;
+      pollInterval = setInterval(async () => {
+        attemptsCount++;
+        try {
+          const res = await fetch(`${apiUrl}/events/${eventId}`);
+          if (res.ok) {
+            const item = await res.json();
+            document.getElementById('jsonViewer').innerText = JSON.stringify(item, null, 2);
+            document.getElementById('displayAttempts').innerText = item.attempts || 0;
+            document.getElementById('displayTimestamp').innerText = new Date().toLocaleTimeString();
+
+            const status = item.status || 'QUEUED';
+            setStatusBadge(status);
+
+            if (status === 'SUCCESS') {
+              document.getElementById('stageLabel').innerText = 'Delivered to Webhook Successfully!';
+              document.getElementById('progressBar').style.width = '100%';
+              document.getElementById('progressBar').className = 'bg-emerald-500 h-full transition-all duration-300';
+              clearInterval(pollInterval);
+            } else if (status === 'FAILED') {
+              document.getElementById('stageLabel').innerText = 'Delivery Exhausted Retries -> Sent to DLQ';
+              document.getElementById('progressBar').style.width = '100%';
+              document.getElementById('progressBar').className = 'bg-rose-500 h-full transition-all duration-300';
+              clearInterval(pollInterval);
+            }
+          }
+        } catch (e) {
+          console.warn('Poll error:', e);
+        }
+
+        if (attemptsCount > 20) clearInterval(pollInterval); // Stop after 40 seconds
+      }, 2000);
+    }
+  </script>
+</body>
+</html>
